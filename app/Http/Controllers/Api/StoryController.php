@@ -1,5 +1,6 @@
 <?php
 namespace App\Http\Controllers\Api;
+
 use Auth;
 use DB;
 use App\User;
@@ -7,6 +8,7 @@ use App\Story;
 use App\Comment;
 use Validator;
 use App\Category;
+use App\Bookmark;
 use App\Reaction;
 use Illuminate\Http\Request;
 use App\Traits\Api\UserTrait;
@@ -15,6 +17,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\StoryResource;
 use App\Http\Resources\SingleStoryResource;
 use Symfony\Component\HttpFoundation\Response;
+
 class StoryController extends Controller
 {
     use UserTrait;
@@ -120,6 +123,9 @@ class StoryController extends Controller
             $reaction = Reaction::where('user_id', $user->id)
                 ->where('story_id', $id)
                 ->first();
+            $bookmark = Bookmark::where('user_id', $user->id)
+                ->where('story_id', $id)
+                ->first();
             if ($reaction && $reaction->reaction == 0) {
                 $action = "disliked";
             } else if ($reaction && $reaction->reaction == 1) {
@@ -127,10 +133,15 @@ class StoryController extends Controller
             } else {
                 $action = 'none';
             }
+            if ($bookmark) {
+                $favorite = true;
+            } else {
+                $favorite = false;
+            }
         }else {
             $action = 'none';
+            $favorite = false;
         }
-        // dd($story->comments->first()->user);
 
         if ($story->is_premium) {
             if ($user) {
@@ -140,7 +151,8 @@ class StoryController extends Controller
                         "code" => Response::HTTP_OK,
                         'message' => 'premium story',
                         'data' => new SingleStoryResource($story),
-                        'reaction' => $action
+                        'reaction' => $action,
+                        'bookmark' => $favorite
                     ], Response::HTTP_OK);
                 }else {
                     return response()->json([
@@ -161,9 +173,11 @@ class StoryController extends Controller
             "code" => Response::HTTP_OK,
             "message" => "OK",
             'data' => new SingleStoryResource($story),
-            'reaction' => $action
+            'reaction' => $action,
+            'bookmark' => $favorite
         ], 200);
     }
+    
     /**
      * Update the specified resource in storage.
      *
@@ -236,12 +250,15 @@ class StoryController extends Controller
      * @param  $id
      * @return \Illuminate\Http\Response
      */
-    public function like($id)
+    public function like(Request $request, $id)
     {
-        $user = $this->user();
+        $user = $request->user('api');
         $story = $this->findStory($id);
         $likeCount = $story['likes_count'];
         $dislikeCount = $story['dislikes_count'];
+        if (!$user) {
+            return null;
+        }
         $reaction = Reaction::where('story_id', $story->id)
                             ->where('user_id', $user->id)
                             ->first();
@@ -258,7 +275,7 @@ class StoryController extends Controller
             $likeCount = $story['likes_count'];
             $dislikeCount = $story['dislikes_count'];
             $reaction = Reaction::updateOrCreate(
-                ['story_id' => $id, 'user_id' => auth()->id()],
+                ['story_id' => $id, 'user_id' => $user->id],
                 ['reaction' => 1]
             );
             $action = 'Changed to like';
@@ -267,7 +284,7 @@ class StoryController extends Controller
             $likeCount = $story['likes_count'];
             $dislikeCount = $story['dislikes_count'];
             $reaction = Reaction::updateOrCreate(
-                ['story_id' => $id, 'user_id' => auth()->id()],
+                ['story_id' => $id, 'user_id' => $user->id],
                 ['reaction' => 1]
             );
             $action = 'Added like';
@@ -288,12 +305,15 @@ class StoryController extends Controller
      * @param  $id
      * @return \Illuminate\Http\Response
      */
-    public function dislike($id)
+    public function dislike(Request $request, $id)
     {
-        $user = $this->user();
+        $user = $request->user('api');
         $story = $this->findStory($id);
         $likeCount = $story['likes_count'];
         $dislikeCount = $story['dislikes_count'];
+        if (!$user) {
+            return null;
+        }
         $reaction = Reaction::where('story_id', $story->id)
                             ->where('user_id', $user->id)
                             ->first();
@@ -310,7 +330,7 @@ class StoryController extends Controller
             $likeCount = $story['likes_count'];
             $dislikeCount = $story['dislikes_count'];
             $reaction = Reaction::updateOrCreate(
-                ['story_id' => $id, 'user_id' => auth()->id()],
+                ['story_id' => $id, 'user_id' => $user->id],
                 ['reaction' => 0]
             );
             $action = 'Changed to dislike';
@@ -319,7 +339,7 @@ class StoryController extends Controller
             $likeCount = $story['likes_count'];
             $dislikeCount = $story['dislikes_count'];
             $reaction = Reaction::updateOrCreate(
-                ['story_id' => $id, 'user_id' => auth()->id()],
+                ['story_id' => $id, 'user_id' => $user->id],
                 ['reaction' => 0]
             );
             $action = 'Added dislike';
